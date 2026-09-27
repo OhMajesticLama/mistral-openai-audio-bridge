@@ -19,6 +19,10 @@ impl Config {
         };
         let upstream =
             lookup("VIBE_BRIDGE_UPSTREAM").unwrap_or_else(|| "http://127.0.0.1:8080".into());
+        match reqwest::Url::parse(&upstream) {
+            Ok(url) if matches!(url.scheme(), "http" | "https") => {}
+            _ => panic!("invalid VIBE_BRIDGE_UPSTREAM {upstream:?}: must be an http(s) URL"),
+        }
         let log_level = lookup("VIBE_BRIDGE_LOG_LEVEL").unwrap_or_else(|| "info".into());
         let dump_dir = if lookup("VOXTRAL_DEBUG_DUMP").as_deref() == Some("1") {
             Some(PathBuf::from(

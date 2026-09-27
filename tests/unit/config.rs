@@ -47,3 +47,17 @@ fn test_dump_dir_env_selects_directory() {
 fn test_invalid_listen_address_panics_loudly() {
     let _ = Config::from_lookup(lookup_from(&[("VIBE_BRIDGE_LISTEN", "not-an-address")]));
 }
+
+#[test]
+#[should_panic(expected = "invalid VIBE_BRIDGE_UPSTREAM")]
+fn test_schemeless_upstream_panics_loudly() {
+    // Regression: a scheme-less upstream used to surface per-request as
+    // "bridge error: builder error"; it must fail at startup instead.
+    let _ = Config::from_lookup(lookup_from(&[("VIBE_BRIDGE_UPSTREAM", "127.0.0.1:9931")]));
+}
+
+#[test]
+#[should_panic(expected = "invalid VIBE_BRIDGE_UPSTREAM")]
+fn test_empty_upstream_panics_loudly() {
+    let _ = Config::from_lookup(lookup_from(&[("VIBE_BRIDGE_UPSTREAM", "")]));
+}

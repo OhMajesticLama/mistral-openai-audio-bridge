@@ -2,6 +2,10 @@
 name = "vibe-audio-bridge"
 version = "0.1.0"
 edition = "2024"
+description = "Vibe voice-mode bridge: Mistral realtime transcription WebSocket protocol -> OpenAI-compatible /v1/audio/transcriptions endpoint"
+license = "MIT"
+authors = ["ohmajesticlama <ohmajesticlama@gmail.com>"]
+readme = "README.md"
 
 [dependencies]
 axum = { version = "0.8", features = ["ws"] }
@@ -42,3 +46,6 @@ path = "tests/system/transcription.rs"
 [[test]]
 name = "system_cli"
 path = "tests/system/cli.rs"
+
+[profile.release]
+strip = true

@@ -1,6 +1,8 @@
 // Story: 001 — system test: bridge against the real voxtral server.
-// Requires a live voxtral upstream (default http://127.0.0.1:9931).
-// Run with: cargo test --test system -- --ignored
+// Requires a live transcription upstream; defaults to the package default
+// (http://127.0.0.1:8080). Point at a tunnel with VIBE_BRIDGE_UPSTREAM_TEST,
+// e.g. VIBE_BRIDGE_UPSTREAM_TEST=http://127.0.0.1:9931
+// Run with: cargo test --test system_transcription -- --ignored
 
 use std::time::Duration;
 

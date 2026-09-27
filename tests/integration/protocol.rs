@@ -296,3 +296,4 @@ fn test_parse_client_message() {
     assert_eq!(parse_client_message("{\"type\":\"session.update\"}"), None);
     assert_eq!(parse_client_message("not json"), None);
 }
+
