@@ -14,6 +14,31 @@ uuid = { version = "1", features = ["v4"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 futures-util = "0.3"
+clap = { version = "4.6.7", features = ["derive"] }
 
 [dev-dependencies]
 tokio-tungstenite = "0.26"
+
+[[test]]
+name = "unit_wav"
+path = "tests/unit/wav.rs"
+
+[[test]]
+name = "unit_config"
+path = "tests/unit/config.rs"
+
+[[test]]
+name = "unit_cli"
+path = "tests/unit/cli.rs"
+
+[[test]]
+name = "integration_protocol"
+path = "tests/integration/protocol.rs"
+
+[[test]]
+name = "system_transcription"
+path = "tests/system/transcription.rs"
+
+[[test]]
+name = "system_cli"
+path = "tests/system/cli.rs"
