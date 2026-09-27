@@ -75,8 +75,8 @@ fn test_no_args_falls_back_to_env() {
 
     // No CLI, no environment: US001 defaults, unchanged.
     let cfg = cli::config_from(&cli, no_env);
-    assert_eq!(cfg.listen.to_string(), "127.0.0.1:9932");
-    assert_eq!(cfg.upstream, "http://127.0.0.1:9931");
+    assert_eq!(cfg.listen.to_string(), "127.0.0.1:8081");
+    assert_eq!(cfg.upstream, "http://127.0.0.1:8080");
     assert_eq!(cfg.log_level, "info");
     assert!(cfg.dump_dir.is_none());
     assert_eq!(Config::from_lookup(no_env).listen, cfg.listen);

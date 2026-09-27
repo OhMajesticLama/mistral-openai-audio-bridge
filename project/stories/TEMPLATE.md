@@ -21,8 +21,9 @@ done_date: YYYY-MM-DD
 ## Story
 <!-- One capability per story. If the "I want" clause has an "and", split it. -->
 <!-- The "so that" clause is mandatory — no stated value, no story. -->
+<!-- The role comes from project/personas.md (Speaker, Operator, Contributor). -->
 
-As a **<role>**,
+As a **<persona from project/personas.md>**,
 I want **<goal/capability>**,
 so that **<value/benefit>**.
 

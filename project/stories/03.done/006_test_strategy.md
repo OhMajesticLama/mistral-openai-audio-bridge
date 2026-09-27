@@ -11,8 +11,8 @@ done_date: 2026-09-27
 
 ## Story
 
-As a **person who dictates into Vibe voice mode through this bridge**,
-I want **every change to the bridge verified automatically at unit, integration, and system levels — including against a real voxtral server like mine — before it reaches me**,
+As a **voice-mode user**,
+I want **every change to the bridge verified automatically at unit, integration, and system levels — including against a real transcription server like mine — before it reaches me**,
 so that **my speech transcribes reliably every time: my words are not lost, mangled, or silently dropped, and each new version of the bridge works the same as the last**.
 
 ## Acceptance criteria

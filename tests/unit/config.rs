@@ -15,8 +15,8 @@ fn lookup_from(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
 #[test]
 fn test_env_overrides_defaults() {
     let cfg = Config::from_lookup(lookup_from(&[]));
-    assert_eq!(cfg.listen.to_string(), "127.0.0.1:9932");
-    assert_eq!(cfg.upstream, "http://127.0.0.1:9931");
+    assert_eq!(cfg.listen.to_string(), "127.0.0.1:8081");
+    assert_eq!(cfg.upstream, "http://127.0.0.1:8080");
     assert!(cfg.dump_dir.is_none());
 
     let cfg = Config::from_lookup(lookup_from(&[

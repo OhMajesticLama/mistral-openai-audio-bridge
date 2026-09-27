@@ -12,14 +12,14 @@ use crate::config::Config;
 #[command(
     name = "vibe-audio-bridge",
     version,
-    about = "Vibe voice-mode transcription bridge: Mistral realtime WS protocol -> voxtral HTTP"
+    about = "Vibe voice-mode bridge: Mistral realtime transcription WebSocket protocol -> OpenAI-compatible /v1/audio/transcriptions endpoint"
 )]
 pub struct Cli {
-    /// Address to listen on [env: VIBE_BRIDGE_LISTEN=127.0.0.1:9932]
+    /// Address to listen on [env: VIBE_BRIDGE_LISTEN=127.0.0.1:8081]
     #[arg(long)]
     pub listen: Option<SocketAddr>,
 
-    /// Upstream transcription server base URL [env: VIBE_BRIDGE_UPSTREAM=http://127.0.0.1:9931]
+    /// Upstream transcription server base URL [env: VIBE_BRIDGE_UPSTREAM=http://127.0.0.1:8080]
     #[arg(long)]
     pub upstream: Option<String>,
 
