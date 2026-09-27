@@ -81,3 +81,31 @@ fn test_no_args_falls_back_to_env() {
     assert!(cfg.dump_dir.is_none());
     assert_eq!(Config::from_lookup(no_env).listen, cfg.listen);
 }
+
+#[test]
+fn test_shorthands_match_long_forms() {
+    // Story: 009 — shorthands parse to the same Cli as their long forms.
+    let short = Cli::try_parse_from([
+        "vibe-audio-bridge",
+        "-l",
+        "127.0.0.1:9955",
+        "-u",
+        "http://127.0.0.1:9999",
+        "-d",
+        "-D",
+        "/tmp/bridge-cli-dumps",
+    ])
+    .unwrap();
+    let long = Cli::try_parse_from([
+        "vibe-audio-bridge",
+        "--listen",
+        "127.0.0.1:9955",
+        "--upstream",
+        "http://127.0.0.1:9999",
+        "--debug-dump",
+        "--dump-dir",
+        "/tmp/bridge-cli-dumps",
+    ])
+    .unwrap();
+    assert_eq!(format!("{short:?}"), format!("{long:?}"));
+}

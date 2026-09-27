@@ -3,6 +3,7 @@
 ## Coding standards
 - Match existing style in the file you are editing.
 - Keep diffs minimal; do not reformat untouched code.
+- No matter the language of the user, the code and its documentation must be in english.
 
 ## Testing
 - Every story has acceptance tests under `tests/`.

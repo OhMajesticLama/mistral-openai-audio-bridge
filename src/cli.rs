@@ -16,11 +16,11 @@ use crate::config::Config;
 )]
 pub struct Cli {
     /// Address to listen on [env: VIBE_BRIDGE_LISTEN=127.0.0.1:8081]
-    #[arg(long)]
+    #[arg(long, short = 'l')]
     pub listen: Option<SocketAddr>,
 
     /// Upstream transcription server base URL [env: VIBE_BRIDGE_UPSTREAM=http://127.0.0.1:8080]
-    #[arg(long)]
+    #[arg(long, short = 'u')]
     pub upstream: Option<String>,
 
     /// Log level (error|warn|info|debug|trace) [env: VIBE_BRIDGE_LOG_LEVEL=info]
@@ -28,11 +28,11 @@ pub struct Cli {
     pub log_level: Option<String>,
 
     /// Dump the raw PCM of each recording for debugging
-    #[arg(long)]
+    #[arg(long, short = 'd')]
     pub debug_dump: bool,
 
     /// Directory for debug dumps (implies --debug-dump) [default: /tmp/voxtral-debug]
-    #[arg(long)]
+    #[arg(long, short = 'D')]
     pub dump_dir: Option<PathBuf>,
 }
 

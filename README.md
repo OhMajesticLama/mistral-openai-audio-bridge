@@ -45,11 +45,11 @@ defaults:
 
 | Flag | Environment variable | Default |
 |---|---|---|
-| `--listen` | `VIBE_BRIDGE_LISTEN` | `127.0.0.1:8081` |
-| `--upstream` | `VIBE_BRIDGE_UPSTREAM` | `http://127.0.0.1:8080` |
+| `-l`, `--listen` | `VIBE_BRIDGE_LISTEN` | `127.0.0.1:8081` |
+| `-u`, `--upstream` | `VIBE_BRIDGE_UPSTREAM` | `http://127.0.0.1:8080` |
 | `--log-level` | `VIBE_BRIDGE_LOG_LEVEL` | `info` |
-| `--debug-dump` | `VOXTRAL_DEBUG_DUMP=1` | off |
-| `--dump-dir` | `VIBE_BRIDGE_DUMP_DIR` | `/tmp/voxtral-debug` |
+| `-d`, `--debug-dump` | `VOXTRAL_DEBUG_DUMP=1` | off |
+| `-D`, `--dump-dir` | `VIBE_BRIDGE_DUMP_DIR` | `/tmp/voxtral-debug` |
 
 `--help` and `--version` are supported.
 
@@ -82,10 +82,48 @@ are dropped.
 
 | Symptom | Likely cause | Check |
 |---|---|---|
-| Client cannot connect (connection refused) | Bridge not running, or wrong `--listen` | `ss -ltn \| grep 9932` |
+| Client cannot connect (connection refused) | Bridge not running, or wrong `--listen` | `ss -ltn \| grep 8081` |
 | Empty transcripts / "no speech" | Mic capture too quiet — not a bridge bug | Run with `--debug-dump`, check the logged `peak=` level and inspect the dumped PCM |
 | `error` event, `upstream HTTP <code>` | Transcription server down or wrong `--upstream` | `curl` the upstream `/v1/audio/transcriptions` directly |
 
+
+## Deploy
+
+Run the bridge as a systemd user service. Save this as
+`~/.config/systemd/user/vibe-audio-bridge.service`:
+
+```ini
+[Unit]
+Description=Vibe audio bridge (Mistral realtime WS -> OpenAI transcriptions)
+After=network.target
+
+[Service]
+ExecStart=%h/.cargo/bin/vibe-audio-bridge
+Restart=on-failure
+RestartSec=2
+# Optional configuration:
+# Environment=VIBE_BRIDGE_UPSTREAM=http://127.0.0.1:8080
+# Environment=VIBE_BRIDGE_LISTEN=127.0.0.1:8081
+# Environment=VOXTRAL_DEBUG_DUMP=1
+
+[Install]
+WantedBy=default.target
+```
+
+`%h` expands to your home directory, so the unit works as long as the
+binary is where `cargo install` put it. Then:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now vibe-audio-bridge
+journalctl --user -u vibe-audio-bridge -f   # follow the logs
+```
+
+The service starts at login. To keep it running with no session open:
+`loginctl enable-linger $USER`.
+
+After reinstalling the binary (`cargo install --path . --force`), restart
+the service: `systemctl --user restart vibe-audio-bridge`.
 
 ## Run tests
 

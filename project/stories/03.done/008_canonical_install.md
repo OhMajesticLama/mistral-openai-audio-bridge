@@ -12,7 +12,7 @@ done_date: 2026-09-27
 ## Story
 
 As a **bridge operator**,
-I want **the package to install the standard Rust way — `cargo install --path .` — with complete package metadata, an MIT license, and a README that tells me how to install, run, configure, and troubleshoot it**,
+I want **the package to install the standard Rust way — `cargo install --path .` — with complete package metadata, a license file, and a README that tells me how to install, run, configure, and troubleshoot it**,
 so that **installing and updating the bridge is a routine `cargo install` instead of a build recipe, and I can see what I'm shipping and trusting before I run it**.
 
 ## Acceptance criteria

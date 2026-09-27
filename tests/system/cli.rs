@@ -33,6 +33,10 @@ fn test_help_prints_usage_and_exits_zero() {
         for opt in ["--listen", "--upstream", "--log-level", "--debug-dump", "--dump-dir"] {
             assert!(stdout.contains(opt), "usage missing {opt}:\n{stdout}");
         }
+        // Story: 009 — shorthands are documented in the usage.
+        for short in ["-l", "-u", "-d", "-D"] {
+            assert!(stdout.contains(short), "usage missing shorthand {short}:\n{stdout}");
+        }
     }
 }
 
