@@ -79,16 +79,7 @@ async fn spawn_mock_upstream() -> SocketAddr {
     addr
 }
 
-fn spawn_bridge(args: &[&str]) -> (Child, u16) {
-    let port = free_port();
-    let child = Command::new(env!("CARGO_BIN_EXE_vibe-audio-bridge"))
-        .args(args)
-        .args(["--listen", &format!("127.0.0.1:{port}")])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    // Wait until the binary actually accepts connections on --listen.
+fn wait_listening(port: u16) {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         assert!(
@@ -100,6 +91,18 @@ fn spawn_bridge(args: &[&str]) -> (Child, u16) {
         }
         std::thread::sleep(Duration::from_millis(50));
     }
+}
+
+fn spawn_bridge(args: &[&str]) -> (Child, u16) {
+    let port = free_port();
+    let child = Command::new(env!("CARGO_BIN_EXE_vibe-audio-bridge"))
+        .args(args)
+        .args(["--listen", &format!("127.0.0.1:{port}")])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    wait_listening(port);
     (child, port)
 }
 
@@ -186,4 +189,82 @@ async fn test_system_log_level_flag() {
         !out.contains("listening on") && !out.contains("INFO"),
         "--log-level error still logged info:\n{out}"
     );
+}
+
+#[tokio::test]
+async fn test_system_env_configures_and_cli_overrides() {
+    // Story: 005 — environment variables configure the bridge, and CLI flags
+    // win over them (VIBE_BRIDGE_LISTEN must lose to --listen).
+    let upstream = spawn_mock_upstream().await;
+    let port = free_port();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_vibe-audio-bridge"))
+        .env_clear()
+        .env("VIBE_BRIDGE_LISTEN", "127.0.0.1:1")
+        .env("VIBE_BRIDGE_UPSTREAM", format!("http://{upstream}"))
+        .args(["--listen", &format!("127.0.0.1:{port}")])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    wait_listening(port);
+    let text = transcribe_once(port).await;
+    child.kill().unwrap();
+    assert_eq!(text, " Bonjour", "env upstream not honored or env listen not overridden");
+}
+
+#[tokio::test]
+async fn test_system_debug_dump_env_enables_dumps() {
+    // VIBE_BRIDGE_DEBUG_DUMP=1 enables dumps, with VIBE_BRIDGE_DUMP_DIR selecting
+    // the directory.
+    let upstream = spawn_mock_upstream().await;
+    let dump_dir = std::env::temp_dir().join(format!("cli-sys-dump-switch-{}", std::process::id()));
+    std::fs::remove_dir_all(&dump_dir).ok();
+    let port = free_port();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_vibe-audio-bridge"))
+        .env_clear()
+        .env("VIBE_BRIDGE_UPSTREAM", format!("http://{upstream}"))
+        .env("VIBE_BRIDGE_DEBUG_DUMP", "1")
+        .env("VIBE_BRIDGE_DUMP_DIR", &dump_dir)
+        .args(["--listen", &format!("127.0.0.1:{port}")])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    wait_listening(port);
+    let _ = transcribe_once(port).await;
+    std::thread::sleep(Duration::from_millis(200));
+    child.kill().unwrap();
+    let files: Vec<_> = std::fs::read_dir(&dump_dir).unwrap().collect();
+    assert_eq!(files.len(), 1, "expected one dump file");
+    let contents = std::fs::read(files[0].as_ref().unwrap().path()).unwrap();
+    assert_eq!(contents, vec![7u8; 64], "dump contents != sent PCM");
+    std::fs::remove_dir_all(&dump_dir).ok();
+}
+
+#[tokio::test]
+async fn test_system_dump_dir_env_alone_enables_dumps() {
+    // Setting a dump directory — flag or env — enables dumps; the env var no
+    // longer requires VIBE_BRIDGE_DEBUG_DUMP=1 as well.
+    let upstream = spawn_mock_upstream().await;
+    let dump_dir = std::env::temp_dir().join(format!("cli-sys-dump-env-{}", std::process::id()));
+    std::fs::remove_dir_all(&dump_dir).ok();
+    let port = free_port();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_vibe-audio-bridge"))
+        .env_clear()
+        .env("VIBE_BRIDGE_UPSTREAM", format!("http://{upstream}"))
+        .env("VIBE_BRIDGE_DUMP_DIR", &dump_dir)
+        .args(["--listen", &format!("127.0.0.1:{port}")])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    wait_listening(port);
+    let _ = transcribe_once(port).await;
+    std::thread::sleep(Duration::from_millis(200));
+    child.kill().unwrap();
+    let files: Vec<_> = std::fs::read_dir(&dump_dir).unwrap().collect();
+    assert_eq!(files.len(), 1, "expected one dump file");
+    let contents = std::fs::read(files[0].as_ref().unwrap().path()).unwrap();
+    assert_eq!(contents, vec![7u8; 64], "dump contents != sent PCM");
+    std::fs::remove_dir_all(&dump_dir).ok();
 }

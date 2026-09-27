@@ -18,11 +18,11 @@ so that **it works with a default audio.cpp setup without writing any configurat
 ## Acceptance criteria
 
 - [x] With no flags or environment variables, the bridge listens on `127.0.0.1:8081`.
-      Test: tests/unit/config.rs::test_env_overrides_defaults
+      Test: tests/unit/cli.rs::test_defaults_without_env
 - [x] With no flags or environment variables, the bridge forwards to `http://127.0.0.1:8080` (audio.cpp's default port).
-      Test: tests/unit/config.rs::test_env_overrides_defaults
+      Test: tests/unit/cli.rs::test_defaults_without_env
 - [x] A no-argument run uses these defaults (CLI > env > defaults chain ends at the new values).
-      Test: tests/unit/cli.rs::test_no_args_falls_back_to_env
+      Test: tests/unit/cli.rs::test_defaults_without_env
 - [x] `--help` shows the new defaults in the environment hints.
       Test: tests/system/cli.rs::test_help_prints_usage_and_exits_zero
 

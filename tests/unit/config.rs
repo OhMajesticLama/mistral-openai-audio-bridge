@@ -1,63 +1,39 @@
-// Story: 001 — configuration from environment variables.
+// Story: 001/005 — Config construction from parsed CLI values.
 
-use std::collections::HashMap;
-
+use vibe_audio_bridge::cli::Cli;
 use vibe_audio_bridge::config::Config;
 
-fn lookup_from(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
-    let map: HashMap<String, String> = pairs
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect();
-    move |k| map.get(k).cloned()
+fn cli() -> Cli {
+    Cli {
+        listen: "127.0.0.1:8081".parse().unwrap(),
+        upstream: "http://127.0.0.1:8080".into(),
+        log_level: "info".into(),
+        debug_dump: false,
+        dump_dir: None,
+    }
 }
 
 #[test]
-fn test_env_overrides_defaults() {
-    let cfg = Config::from_lookup(lookup_from(&[]));
+fn test_from_cli_defaults() {
+    let cfg = Config::from_cli(&cli());
     assert_eq!(cfg.listen.to_string(), "127.0.0.1:8081");
     assert_eq!(cfg.upstream, "http://127.0.0.1:8080");
+    assert_eq!(cfg.log_level, "info");
     assert!(cfg.dump_dir.is_none());
-
-    let cfg = Config::from_lookup(lookup_from(&[
-        ("VIBE_BRIDGE_LISTEN", "127.0.0.1:9944"),
-        ("VIBE_BRIDGE_UPSTREAM", "http://127.0.0.1:9999"),
-        ("VOXTRAL_DEBUG_DUMP", "1"),
-    ]));
-    assert_eq!(cfg.listen.to_string(), "127.0.0.1:9944");
-    assert_eq!(cfg.upstream, "http://127.0.0.1:9999");
-    assert_eq!(cfg.dump_dir.as_deref().unwrap().to_str().unwrap(), "/tmp/voxtral-debug");
 }
 
 #[test]
-fn test_dump_dir_env_selects_directory() {
-    let cfg = Config::from_lookup(lookup_from(&[
-        ("VOXTRAL_DEBUG_DUMP", "1"),
-        ("VIBE_BRIDGE_DUMP_DIR", "/tmp/bridge-dumps"),
-    ]));
+fn test_debug_dump_uses_default_dir() {
+    let mut c = cli();
+    c.debug_dump = true;
+    let cfg = Config::from_cli(&c);
+    assert_eq!(cfg.dump_dir.as_deref().unwrap().to_str().unwrap(), "/tmp/vibe-audio-bridge-debug");
+}
+
+#[test]
+fn test_dump_dir_implies_debug_dump() {
+    let mut c = cli();
+    c.dump_dir = Some("/tmp/bridge-dumps".into());
+    let cfg = Config::from_cli(&c);
     assert_eq!(cfg.dump_dir.as_deref().unwrap().to_str().unwrap(), "/tmp/bridge-dumps");
-
-    // Dump disabled: dump dir stays unset even if the dir var is given.
-    let cfg = Config::from_lookup(lookup_from(&[("VIBE_BRIDGE_DUMP_DIR", "/tmp/bridge-dumps")]));
-    assert!(cfg.dump_dir.is_none());
-}
-
-#[test]
-#[should_panic(expected = "invalid VIBE_BRIDGE_LISTEN")]
-fn test_invalid_listen_address_panics_loudly() {
-    let _ = Config::from_lookup(lookup_from(&[("VIBE_BRIDGE_LISTEN", "not-an-address")]));
-}
-
-#[test]
-#[should_panic(expected = "invalid VIBE_BRIDGE_UPSTREAM")]
-fn test_schemeless_upstream_panics_loudly() {
-    // Regression: a scheme-less upstream used to surface per-request as
-    // "bridge error: builder error"; it must fail at startup instead.
-    let _ = Config::from_lookup(lookup_from(&[("VIBE_BRIDGE_UPSTREAM", "127.0.0.1:9931")]));
-}
-
-#[test]
-#[should_panic(expected = "invalid VIBE_BRIDGE_UPSTREAM")]
-fn test_empty_upstream_panics_loudly() {
-    let _ = Config::from_lookup(lookup_from(&[("VIBE_BRIDGE_UPSTREAM", "")]));
 }

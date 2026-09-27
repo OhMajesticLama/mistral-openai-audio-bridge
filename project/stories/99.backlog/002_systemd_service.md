@@ -29,4 +29,4 @@ so that **voice dictation works after login without manually launching the bridg
 
 - Replaces the currently installed `~/.config/systemd/user/voxtral-bridge.service`, which still points at `/usr/bin/python3 .../voxtral-bridge.py`.
 - Depends on story 001.
-- The debug drop-in (`voxtral-bridge.service.d/debug.conf` with `VOXTRAL_DEBUG_DUMP=1`) stays as-is.
+- The debug drop-in (`voxtral-bridge.service.d/debug.conf`) must switch from the retired `VOXTRAL_DEBUG_DUMP=1` to `VIBE_BRIDGE_DEBUG_DUMP=1` (the env var was renamed when voxtral mentions were removed from configuration).

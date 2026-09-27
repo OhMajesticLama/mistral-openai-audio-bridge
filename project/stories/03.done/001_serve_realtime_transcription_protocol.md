@@ -28,8 +28,8 @@ so that **voice dictation transcribes through my local voxtral server running au
 - [x] A non-200 upstream response is reported to the client as a protocol `error` event including the status code and a truncated body.
       Test: tests/integration/protocol.rs::test_upstream_error_reported_to_client
 - [x] Listen address, upstream URL, and log level are configurable via environment variables with defaults matching the Python bridge (127.0.0.1:9932, http://127.0.0.1:9931, info).
-      Test: tests/unit/config.rs::test_env_overrides_defaults
-      Note: defaults later changed to 127.0.0.1:8081 / http://127.0.0.1:8080 (audio.cpp's default port); the test asserts the current defaults.
+      Test: tests/system/cli.rs::test_system_env_configures_and_cli_overrides; tests/unit/cli.rs::test_defaults_without_env
+      Note: defaults later changed to 127.0.0.1:8081 / http://127.0.0.1:8080 (audio.cpp's default port); the tests assert the current defaults.
 - [x] Each transcription logs the byte count, approximate duration, and peak sample level; `VOXTRAL_DEBUG_DUMP=1` dumps the raw PCM under `/tmp/voxtral-debug/`.
       Test: tests/integration/protocol.rs::test_debug_dump_written
 - [x] Definition of Done met.

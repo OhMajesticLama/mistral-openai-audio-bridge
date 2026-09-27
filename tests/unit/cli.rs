@@ -1,16 +1,26 @@
-// Story: 005 — CLI parse/merge unit tests (no process spawning).
+// Story: 005/009 — CLI parsing unit tests (no process spawning).
+// Environment lookup is stripped so tests do not read the host environment;
+// env precedence is covered against the real binary in tests/system/cli.rs.
 
-use clap::Parser;
-use vibe_audio_bridge::cli::{self, Cli};
-use vibe_audio_bridge::config::Config;
+use clap::{CommandFactory, FromArgMatches};
+use vibe_audio_bridge::cli::Cli;
 
-fn no_env(_: &str) -> Option<String> {
-    None
+/// The clap command with env lookup disabled, for hermetic parsing.
+fn cmd() -> clap::Command {
+    let mut cmd = Cli::command();
+    for id in ["listen", "upstream", "log_level", "debug_dump", "dump_dir"] {
+        cmd = cmd.mut_arg(id, |a| a.env(None));
+    }
+    cmd
+}
+
+fn parse(args: &[&str]) -> Cli {
+    Cli::from_arg_matches(&cmd().try_get_matches_from(args.iter().copied()).unwrap()).unwrap()
 }
 
 #[test]
-fn test_flags_override_env_and_defaults() {
-    let cli = Cli::try_parse_from([
+fn test_flags_parse() {
+    let cli = parse(&[
         "vibe-audio-bridge",
         "--listen",
         "127.0.0.1:9955",
@@ -21,71 +31,28 @@ fn test_flags_override_env_and_defaults() {
         "--debug-dump",
         "--dump-dir",
         "/tmp/bridge-cli-dumps",
-    ])
-    .unwrap();
-
-    // CLI wins over a conflicting environment.
-    let env = |k: &str| {
-        match k {
-            "VIBE_BRIDGE_LISTEN" => Some("127.0.0.1:1".to_string()),
-            "VIBE_BRIDGE_UPSTREAM" => Some("http://127.0.0.1:2".to_string()),
-            "VIBE_BRIDGE_LOG_LEVEL" => Some("warn".to_string()),
-            "VOXTRAL_DEBUG_DUMP" => Some("0".to_string()),
-            _ => None,
-        }
-    };
-    let cfg = cli::config_from(&cli, env);
-    assert_eq!(cfg.listen.to_string(), "127.0.0.1:9955");
-    assert_eq!(cfg.upstream, "http://127.0.0.1:9999");
-    assert_eq!(cfg.log_level, "debug");
-    let dump_dir = cfg.dump_dir.expect("--debug-dump must enable dumps");
-    assert_eq!(dump_dir.to_str().unwrap(), "/tmp/bridge-cli-dumps");
-
-    // Same CLI, no environment: CLI still wins over defaults.
-    let cfg = cli::config_from(&cli, no_env);
-    assert_eq!(cfg.listen.to_string(), "127.0.0.1:9955");
-    assert!(cfg.dump_dir.is_some());
+    ]);
+    assert_eq!(cli.listen.to_string(), "127.0.0.1:9955");
+    assert_eq!(cli.upstream, "http://127.0.0.1:9999");
+    assert_eq!(cli.log_level, "debug");
+    assert!(cli.debug_dump);
+    assert_eq!(cli.dump_dir.as_deref().unwrap().to_str().unwrap(), "/tmp/bridge-cli-dumps");
 }
 
 #[test]
-fn test_dump_dir_alone_enables_dumps() {
-    let cli = Cli::try_parse_from(["vibe-audio-bridge", "--dump-dir", "/tmp/d"])
-        .unwrap();
-    let cfg = cli::config_from(&cli, no_env);
-    assert_eq!(cfg.dump_dir.as_deref().unwrap().to_str().unwrap(), "/tmp/d");
-}
-
-#[test]
-fn test_no_args_falls_back_to_env() {
-    let cli = Cli::try_parse_from(["vibe-audio-bridge"]).unwrap();
-
-    // Environment provides the values.
-    let env = |k: &str| {
-        match k {
-            "VIBE_BRIDGE_LISTEN" => Some("127.0.0.1:9966".to_string()),
-            "VIBE_BRIDGE_UPSTREAM" => Some("http://127.0.0.1:9977".to_string()),
-            "VIBE_BRIDGE_LOG_LEVEL" => Some("trace".to_string()),
-            _ => None,
-        }
-    };
-    let cfg = cli::config_from(&cli, env);
-    assert_eq!(cfg.listen.to_string(), "127.0.0.1:9966");
-    assert_eq!(cfg.upstream, "http://127.0.0.1:9977");
-    assert_eq!(cfg.log_level, "trace");
-
-    // No CLI, no environment: US001 defaults, unchanged.
-    let cfg = cli::config_from(&cli, no_env);
-    assert_eq!(cfg.listen.to_string(), "127.0.0.1:8081");
-    assert_eq!(cfg.upstream, "http://127.0.0.1:8080");
-    assert_eq!(cfg.log_level, "info");
-    assert!(cfg.dump_dir.is_none());
-    assert_eq!(Config::from_lookup(no_env).listen, cfg.listen);
+fn test_defaults_without_env() {
+    let cli = parse(&["vibe-audio-bridge"]);
+    assert_eq!(cli.listen.to_string(), "127.0.0.1:8081");
+    assert_eq!(cli.upstream, "http://127.0.0.1:8080");
+    assert_eq!(cli.log_level, "info");
+    assert!(!cli.debug_dump);
+    assert!(cli.dump_dir.is_none());
 }
 
 #[test]
 fn test_shorthands_match_long_forms() {
     // Story: 009 — shorthands parse to the same Cli as their long forms.
-    let short = Cli::try_parse_from([
+    let short = parse(&[
         "vibe-audio-bridge",
         "-l",
         "127.0.0.1:9955",
@@ -94,9 +61,8 @@ fn test_shorthands_match_long_forms() {
         "-d",
         "-D",
         "/tmp/bridge-cli-dumps",
-    ])
-    .unwrap();
-    let long = Cli::try_parse_from([
+    ]);
+    let long = parse(&[
         "vibe-audio-bridge",
         "--listen",
         "127.0.0.1:9955",
@@ -105,7 +71,26 @@ fn test_shorthands_match_long_forms() {
         "--debug-dump",
         "--dump-dir",
         "/tmp/bridge-cli-dumps",
-    ])
-    .unwrap();
+    ]);
     assert_eq!(format!("{short:?}"), format!("{long:?}"));
+}
+
+#[test]
+fn test_invalid_listen_address_rejected() {
+    let err = cmd()
+        .try_get_matches_from(["vibe-audio-bridge", "--listen", "not-an-address"])
+        .unwrap_err();
+    assert!(err.to_string().contains("invalid value"), "{err}");
+}
+
+#[test]
+fn test_invalid_upstream_rejected() {
+    // Regression: a scheme-less or empty upstream used to surface per-request
+    // as "bridge error: builder error"; it must fail at startup instead.
+    for bad in ["127.0.0.1:9931", ""] {
+        let err = cmd()
+            .try_get_matches_from(vec!["vibe-audio-bridge", "--upstream", bad])
+            .unwrap_err();
+        assert!(err.to_string().contains("http(s)"), "upstream {bad:?} accepted: {err}");
+    }
 }

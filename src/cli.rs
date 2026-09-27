@@ -1,12 +1,28 @@
-// CLI arguments: clap-derived flags merged over environment configuration.
-// Precedence: CLI > environment > defaults.
+// CLI arguments: clap-derived flags with environment-variable fallbacks.
+// Precedence: CLI > environment > defaults, applied by clap itself.
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use clap::Parser;
 
-use crate::config::Config;
+/// Upstream must be an http(s) URL; anything else fails at argument parsing.
+fn http_url(s: &str) -> Result<String, String> {
+    match reqwest::Url::parse(s) {
+        Ok(url) if matches!(url.scheme(), "http" | "https") => Ok(s.to_string()),
+        _ => Err(format!("invalid upstream {s:?}: must be an http(s) URL")),
+    }
+}
+
+/// Accepts the usual truthy/falsy spellings for VIBE_BRIDGE_DEBUG_DUMP ("1" is
+/// the documented value; clap's default bool parser rejects it).
+fn boolish(s: &str) -> Result<bool, String> {
+    match s.to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Ok(true),
+        "0" | "false" | "no" | "off" | "" => Ok(false),
+        _ => Err(format!("invalid boolean {s:?}")),
+    }
+}
 
 #[derive(Debug, Parser)]
 #[command(
@@ -15,47 +31,23 @@ use crate::config::Config;
     about = "Vibe voice-mode bridge: Mistral realtime transcription WebSocket protocol -> OpenAI-compatible /v1/audio/transcriptions endpoint"
 )]
 pub struct Cli {
-    /// Address to listen on [env: VIBE_BRIDGE_LISTEN=127.0.0.1:8081]
-    #[arg(long, short = 'l')]
-    pub listen: Option<SocketAddr>,
+    /// Address to listen on
+    #[arg(long, short = 'l', env = "VIBE_BRIDGE_LISTEN", default_value = "127.0.0.1:8081")]
+    pub listen: SocketAddr,
 
-    /// Upstream transcription server base URL [env: VIBE_BRIDGE_UPSTREAM=http://127.0.0.1:8080]
-    #[arg(long, short = 'u')]
-    pub upstream: Option<String>,
+    /// Upstream transcription server base URL
+    #[arg(long, short = 'u', env = "VIBE_BRIDGE_UPSTREAM", default_value = "http://127.0.0.1:8080", value_parser = http_url)]
+    pub upstream: String,
 
-    /// Log level (error|warn|info|debug|trace) [env: VIBE_BRIDGE_LOG_LEVEL=info]
-    #[arg(long)]
-    pub log_level: Option<String>,
+    /// Log level (error|warn|info|debug|trace)
+    #[arg(long, env = "VIBE_BRIDGE_LOG_LEVEL", default_value = "info")]
+    pub log_level: String,
 
     /// Dump the raw PCM of each recording for debugging
-    #[arg(long, short = 'd')]
+    #[arg(long, short = 'd', env = "VIBE_BRIDGE_DEBUG_DUMP", value_parser = boolish)]
     pub debug_dump: bool,
 
-    /// Directory for debug dumps (implies --debug-dump) [default: /tmp/voxtral-debug]
-    #[arg(long, short = 'D')]
+    /// Directory for debug dumps (implies --debug-dump) [default: /tmp/vibe-audio-bridge-debug]
+    #[arg(long, short = 'D', env = "VIBE_BRIDGE_DUMP_DIR")]
     pub dump_dir: Option<PathBuf>,
-}
-
-/// Merge CLI flags over the environment lookup into a Config.
-pub fn config_from(cli: &Cli, env: impl Fn(&str) -> Option<String>) -> Config {
-    Config::from_lookup(|key| {
-        let from_cli = match key {
-            "VIBE_BRIDGE_LISTEN" => cli.listen.map(|a| a.to_string()),
-            "VIBE_BRIDGE_UPSTREAM" => cli.upstream.clone(),
-            "VIBE_BRIDGE_LOG_LEVEL" => cli.log_level.clone(),
-            "VOXTRAL_DEBUG_DUMP" => {
-                if cli.debug_dump || cli.dump_dir.is_some() {
-                    Some("1".to_string())
-                } else {
-                    None
-                }
-            }
-            "VIBE_BRIDGE_DUMP_DIR" => cli
-                .dump_dir
-                .as_ref()
-                .map(|p| p.to_string_lossy().into_owned()),
-            _ => None,
-        };
-        from_cli.or_else(|| env(key))
-    })
 }

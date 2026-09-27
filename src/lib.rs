@@ -1,4 +1,4 @@
-// Vibe audio bridge: Mistral realtime transcription WS protocol -> voxtral HTTP.
+// Vibe audio bridge: Mistral realtime transcription WS protocol -> OpenAI-compatible transcriptions HTTP.
 
 pub mod cli;
 pub mod config;

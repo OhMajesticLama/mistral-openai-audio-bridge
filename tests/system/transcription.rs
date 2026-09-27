@@ -1,4 +1,4 @@
-// Story: 001 — system test: bridge against the real voxtral server.
+// Story: 001 — system test: bridge against the real transcription server.
 // Requires a live transcription upstream; defaults to the package default
 // (http://127.0.0.1:8080). Point at a tunnel with VIBE_BRIDGE_UPSTREAM_TEST,
 // e.g. VIBE_BRIDGE_UPSTREAM_TEST=http://127.0.0.1:9931
@@ -34,12 +34,15 @@ async fn recv_json(ws: &mut Ws) -> Value {
 }
 
 #[tokio::test]
-#[ignore = "requires a live voxtral server on 127.0.0.1:9931"]
+#[ignore = "requires a live transcription server on 127.0.0.1:9931"]
 async fn test_live_transcription_end_to_end() {
-    let cfg = Config::from_lookup(|k| match k {
-        "VIBE_BRIDGE_UPSTREAM" => std::env::var("VIBE_BRIDGE_UPSTREAM_TEST").ok(),
-        _ => None,
-    });
+    let cfg = Config {
+        listen: "127.0.0.1:8081".parse().unwrap(),
+        upstream: std::env::var("VIBE_BRIDGE_UPSTREAM_TEST")
+            .unwrap_or_else(|_| "http://127.0.0.1:8080".into()),
+        log_level: "info".into(),
+        dump_dir: None,
+    };
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let app = router(cfg);

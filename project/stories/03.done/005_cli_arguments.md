@@ -24,9 +24,9 @@ so that **the binary follows platform conventions instead of starting the server
 - [x] An unknown flag prints an error to stderr and exits non-zero; the server does not start.
       Test: tests/system/cli.rs::test_unknown_flag_fails_without_serving
 - [x] Flags override environment variables, which override defaults, for the existing configuration surface: `--listen`, `--upstream`, `--log-level`, `--debug-dump` (implies `VOXTRAL_DEBUG_DUMP=1`), `--dump-dir`.
-      Test: tests/unit/cli.rs::test_flags_override_env_and_defaults
+      Test: tests/system/cli.rs::test_system_env_configures_and_cli_overrides
 - [x] With no arguments, behavior is unchanged from US001 (environment variables and defaults apply).
-      Test: tests/unit/cli.rs::test_no_args_falls_back_to_env
+      Test: tests/unit/cli.rs::test_defaults_without_env
 
 ## Notes
 

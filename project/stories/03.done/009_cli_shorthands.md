@@ -22,7 +22,7 @@ so that **repeated manual runs from the terminal are faster to type and easier t
 - [x] A shorthand parses to the same `Cli` value as its long form.
       Test: tests/unit/cli.rs::test_shorthands_match_long_forms
 - [x] Long forms are unchanged; existing invocations keep working.
-      Test: tests/unit/cli.rs::test_flags_override_env_and_defaults (existing, must stay green)
+      Test: tests/unit/cli.rs::test_flags_parse (existing, must stay green)
 
 ## Notes
 

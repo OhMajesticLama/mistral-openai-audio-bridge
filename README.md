@@ -1,7 +1,6 @@
 # vibe-audio-bridge
 
-WebSocket bridge from the Mistral realtime transcription protocol to an
-OpenAI-compatible `POST /v1/audio/transcriptions` endpoint.
+WebSocket bridge from the Mistral realtime transcription protocol to an OpenAI-compatible `POST /v1/audio/transcriptions` endpoint -  the project was initially written to work with [audio.cpp](https://github.com/0xShug0/audio.cpp).
 
 Clients that speak the Mistral realtime transcription protocol over
 WebSocket (e.g. Vibe's voice mode) cannot talk to a transcription server
@@ -48,8 +47,11 @@ defaults:
 | `-l`, `--listen` | `VIBE_BRIDGE_LISTEN` | `127.0.0.1:8081` |
 | `-u`, `--upstream` | `VIBE_BRIDGE_UPSTREAM` | `http://127.0.0.1:8080` |
 | `--log-level` | `VIBE_BRIDGE_LOG_LEVEL` | `info` |
-| `-d`, `--debug-dump` | `VOXTRAL_DEBUG_DUMP=1` | off |
-| `-D`, `--dump-dir` | `VIBE_BRIDGE_DUMP_DIR` | `/tmp/voxtral-debug` |
+| `-d`, `--debug-dump` | `VIBE_BRIDGE_DEBUG_DUMP=1` | off |
+| `-D`, `--dump-dir` | `VIBE_BRIDGE_DUMP_DIR` | `/tmp/vibe-audio-bridge-debug` |
+
+Setting a dump directory — by flag or environment variable — enables dumps;
+`VIBE_BRIDGE_DEBUG_DUMP=1` enables them with the default directory.
 
 `--help` and `--version` are supported.
 
@@ -69,13 +71,14 @@ upstream).
 |---|---|---|
 | out | `session.created` | Sent on connect; announces model and audio format |
 | in | `input_audio.append` | Base64 PCM chunk, buffered |
-| in | `input_audio.flush` | Accepted, no-op (batch upstream) |
+| in | `input_audio.flush` | Ignored (batch upstream) |
 | in | `input_audio.end` | Transcribe the buffer, then reset it |
 | out | `transcription.text.delta` | Partial transcript, forwarded from upstream SSE |
 | out | `transcription.done` | Final transcript; empty buffer short-circuits without an upstream call |
 | out | `error` | Upstream HTTP failure (status + truncated body) or transport error |
 
-`session.update` and unknown message types are ignored; non-JSON frames
+`input_audio.flush`, `session.update` and unknown message types are ignored;
+non-JSON frames
 are dropped.
 
 ## Troubleshooting
@@ -104,7 +107,7 @@ RestartSec=2
 # Optional configuration:
 # Environment=VIBE_BRIDGE_UPSTREAM=http://127.0.0.1:8080
 # Environment=VIBE_BRIDGE_LISTEN=127.0.0.1:8081
-# Environment=VOXTRAL_DEBUG_DUMP=1
+# Environment=VIBE_BRIDGE_DEBUG_DUMP=1
 
 [Install]
 WantedBy=default.target

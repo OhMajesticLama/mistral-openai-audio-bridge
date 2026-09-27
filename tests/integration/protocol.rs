@@ -73,10 +73,12 @@ async fn spawn_bridge(cfg: Config) -> SocketAddr {
 }
 
 fn bridge_cfg(upstream: SocketAddr) -> Config {
-    Config::from_lookup(|k| match k {
-        "VIBE_BRIDGE_UPSTREAM" => Some(format!("http://{}", upstream)),
-        _ => None,
-    })
+    Config {
+        listen: "127.0.0.1:8081".parse().unwrap(),
+        upstream: format!("http://{upstream}"),
+        log_level: "info".into(),
+        dump_dir: None,
+    }
 }
 
 async fn ws_connect(addr: SocketAddr, query: &str) -> Ws {
@@ -126,10 +128,10 @@ async fn collect_until_done(ws: &mut Ws) -> (Vec<String>, String) {
 async fn test_session_created_on_connect() {
     let addr = spawn_bridge(bridge_cfg(spawn_upstream(200, SSE_OK).await.addr)).await;
 
-    let mut ws = ws_connect(addr, "?model=voxtral-realtime").await;
+    let mut ws = ws_connect(addr, "?model=test-model").await;
     let ev = recv_json(&mut ws).await;
     assert_eq!(ev["type"], "session.created");
-    assert_eq!(ev["session"]["model"], "voxtral-realtime");
+    assert_eq!(ev["session"]["model"], "test-model");
     assert_eq!(ev["session"]["audio_format"]["encoding"], "pcm_s16le");
     assert_eq!(ev["session"]["audio_format"]["sample_rate"], 16000);
     assert!(ev["session"]["request_id"].as_str().is_some());
@@ -146,7 +148,7 @@ async fn test_append_then_end_posts_wav_upstream() {
     let addr = spawn_bridge(bridge_cfg(upstream.addr)).await;
 
     let pcm: Vec<u8> = (0..64u8).collect();
-    let mut ws = ws_connect(addr, "?model=voxtral-realtime").await;
+    let mut ws = ws_connect(addr, "?model=test-model").await;
     let _ = recv_json(&mut ws).await; // session.created
     send_json(&mut ws, append_msg(&pcm)).await;
     send_json(&mut ws, end_msg()).await;
@@ -172,7 +174,7 @@ async fn test_upstream_deltas_forwarded_as_transcription_events() {
     let upstream = spawn_upstream(200, SSE_OK).await;
     let addr = spawn_bridge(bridge_cfg(upstream.addr)).await;
 
-    let mut ws = ws_connect(addr, "?model=voxtral-realtime").await;
+    let mut ws = ws_connect(addr, "?model=test-model").await;
     let _ = recv_json(&mut ws).await;
     send_json(&mut ws, append_msg(&[0u8; 32])).await;
     send_json(&mut ws, end_msg()).await;
@@ -187,7 +189,7 @@ async fn test_empty_recording_short_circuits() {
     let upstream = spawn_upstream(200, SSE_OK).await;
     let addr = spawn_bridge(bridge_cfg(upstream.addr)).await;
 
-    let mut ws = ws_connect(addr, "?model=voxtral-realtime").await;
+    let mut ws = ws_connect(addr, "?model=test-model").await;
     let _ = recv_json(&mut ws).await;
     send_json(&mut ws, end_msg()).await;
 
@@ -202,7 +204,7 @@ async fn test_two_recordings_in_one_session() {
     let upstream = spawn_upstream(200, SSE_OK).await;
     let addr = spawn_bridge(bridge_cfg(upstream.addr)).await;
 
-    let mut ws = ws_connect(addr, "?model=voxtral-realtime").await;
+    let mut ws = ws_connect(addr, "?model=test-model").await;
     let _ = recv_json(&mut ws).await; // session.created
     for _ in 0..2 {
         send_json(&mut ws, append_msg(&[0u8; 32])).await;
@@ -217,13 +219,10 @@ async fn test_two_recordings_in_one_session() {
 #[tokio::test]
 async fn test_upstream_trailing_slash_still_resolves() {
     let upstream = spawn_upstream(200, SSE_OK).await;
-    let cfg = Config::from_lookup(|k| match k {
-        "VIBE_BRIDGE_UPSTREAM" => Some(format!("http://{}/", upstream.addr)),
-        _ => None,
-    });
+    let cfg = Config { upstream: format!("http://{}/", upstream.addr), ..bridge_cfg(upstream.addr) };
     let addr = spawn_bridge(cfg).await;
 
-    let mut ws = ws_connect(addr, "?model=voxtral-realtime").await;
+    let mut ws = ws_connect(addr, "?model=test-model").await;
     let _ = recv_json(&mut ws).await;
     send_json(&mut ws, append_msg(&[0u8; 32])).await;
     send_json(&mut ws, end_msg()).await;
@@ -236,7 +235,7 @@ async fn test_upstream_error_reported_to_client() {
     let upstream = spawn_upstream(500, "boom").await;
     let addr = spawn_bridge(bridge_cfg(upstream.addr)).await;
 
-    let mut ws = ws_connect(addr, "?model=voxtral-realtime").await;
+    let mut ws = ws_connect(addr, "?model=test-model").await;
     let _ = recv_json(&mut ws).await;
     send_json(&mut ws, append_msg(&[0u8; 32])).await;
     send_json(&mut ws, end_msg()).await;
@@ -255,16 +254,11 @@ async fn test_debug_dump_written() {
     std::fs::create_dir_all(&dump_dir).unwrap();
 
     let upstream = spawn_upstream(200, SSE_OK).await;
-    let cfg = Config::from_lookup(|k| match k {
-        "VIBE_BRIDGE_UPSTREAM" => Some(format!("http://{}", upstream.addr)),
-        "VOXTRAL_DEBUG_DUMP" => Some("1".to_string()),
-        "VIBE_BRIDGE_DUMP_DIR" => Some(dump_dir.to_string_lossy().into_owned()),
-        _ => None,
-    });
+    let cfg = Config { dump_dir: Some(dump_dir.clone()), ..bridge_cfg(upstream.addr) };
     let addr = spawn_bridge(cfg).await;
 
     let pcm: Vec<u8> = (200..232u8).collect();
-    let mut ws = ws_connect(addr, "?model=voxtral-realtime").await;
+    let mut ws = ws_connect(addr, "?model=test-model").await;
     let _ = recv_json(&mut ws).await;
     send_json(&mut ws, append_msg(&pcm)).await;
     send_json(&mut ws, end_msg()).await;
@@ -285,10 +279,8 @@ fn test_parse_client_message() {
         parse_client_message(&format!("{{\"type\":\"input_audio.append\",\"audio\":\"{b64}\"}}")),
         Some(ClientMessage::Append(pcm))
     );
-    assert_eq!(
-        parse_client_message("{\"type\":\"input_audio.flush\"}"),
-        Some(ClientMessage::Flush)
-    );
+    // flush is ignored like unknown types (batch upstream: nothing to flush)
+    assert_eq!(parse_client_message("{\"type\":\"input_audio.flush\"}"), None);
     assert_eq!(
         parse_client_message("{\"type\":\"input_audio.end\"}"),
         Some(ClientMessage::End)

@@ -1,7 +1,10 @@
-// Configuration from environment variables, with Python-bridge defaults.
+// Runtime configuration, built from the parsed CLI. clap has already merged
+// environment variables and defaults into it (CLI > env > defaults).
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
+
+use crate::cli::Cli;
 
 #[derive(Clone)]
 pub struct Config {
@@ -12,29 +15,12 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn from_lookup(lookup: impl Fn(&str) -> Option<String>) -> Self {
-        let listen = match lookup("VIBE_BRIDGE_LISTEN") {
-            Some(v) => v.parse().unwrap_or_else(|_| panic!("invalid VIBE_BRIDGE_LISTEN: {v}")),
-            None => SocketAddr::from(([127, 0, 0, 1], 8081)),
-        };
-        let upstream =
-            lookup("VIBE_BRIDGE_UPSTREAM").unwrap_or_else(|| "http://127.0.0.1:8080".into());
-        match reqwest::Url::parse(&upstream) {
-            Ok(url) if matches!(url.scheme(), "http" | "https") => {}
-            _ => panic!("invalid VIBE_BRIDGE_UPSTREAM {upstream:?}: must be an http(s) URL"),
-        }
-        let log_level = lookup("VIBE_BRIDGE_LOG_LEVEL").unwrap_or_else(|| "info".into());
-        let dump_dir = if lookup("VOXTRAL_DEBUG_DUMP").as_deref() == Some("1") {
-            Some(PathBuf::from(
-                lookup("VIBE_BRIDGE_DUMP_DIR").unwrap_or_else(|| "/tmp/voxtral-debug".into()),
-            ))
+    pub fn from_cli(cli: &Cli) -> Self {
+        let dump_dir = if cli.debug_dump || cli.dump_dir.is_some() {
+            Some(cli.dump_dir.clone().unwrap_or_else(|| PathBuf::from("/tmp/vibe-audio-bridge-debug")))
         } else {
             None
         };
-        Config { listen, upstream, log_level, dump_dir }
-    }
-
-    pub fn from_env() -> Self {
-        Self::from_lookup(|k| std::env::var(k).ok())
+        Config { listen: cli.listen, upstream: cli.upstream.clone(), log_level: cli.log_level.clone(), dump_dir }
     }
 }

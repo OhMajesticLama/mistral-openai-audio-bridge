@@ -18,13 +18,13 @@ so that **my speech transcribes reliably every time: my words are not lost, mang
 ## Acceptance criteria
 
 - [x] The pieces my dictation depends on are proven in isolation: WAV wrapping (my audio must arrive as valid 16 kHz PCM), configuration (my `VIBE_BRIDGE_*` settings must be honored), and CLI parsing — under `tests/unit/`, one file per module.
-      Test: `cargo test --test unit_wav` (3), `cargo test --test unit_config` (3), `cargo test --test unit_cli` (3)
+      Test: `cargo test --test unit_wav` (3), `cargo test --test unit_config` (3), `cargo test --test unit_cli` (5)
 - [x] A whole dictation session is proven end-to-end against a mock transcription server: connect, stream audio, receive my transcript — under `tests/integration/`, no dependence on my environment.
       Test: `cargo test --test integration_protocol` (9)
 - [x] The artifacts I actually run are proven for real: the shipped binary honors every CLI argument, and a live voxtral server transcribes real speech through the bridge — under `tests/system/`, the live-server test `--ignored` so it runs against *my* server when I choose.
-      Test: `cargo test --test system_cli` (6), `cargo test --test system_transcription -- --ignored` (1)
+      Test: `cargo test --test system_cli` (9), `cargo test --test system_transcription -- --ignored` (1)
 - [x] One command shows the whole picture: every test file is a declared `[[test]]` target in `Cargo.toml` and `cargo test` runs all levels green, so "does this version work?" always has an answer.
-      Test: `cargo test` (25 passed, 0 failed, 1 ignored)
+      Test: `cargo test` (29 passed, 0 failed, 1 ignored)
 - [x] The strategy is written down where it stays true: `AGENTS.md` (testing section) and `docs/architecture.md` (Tests section) describe the level split, the subfolder layout, and the `[[test]]` requirement.
       Test: docs/architecture.md#tests; AGENTS.md#testing
 

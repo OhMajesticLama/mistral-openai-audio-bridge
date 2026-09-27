@@ -12,20 +12,19 @@ use crate::wav;
 #[derive(Debug, PartialEq)]
 pub enum ClientMessage {
     Append(Vec<u8>),
-    Flush,
     End,
 }
 
-/// Parse one client text frame; None for non-JSON, unknown types, or bad base64.
+/// Parse one client text frame; None for non-JSON, ignored or unknown types,
+/// or bad base64.
 pub fn parse_client_message(raw: &str) -> Option<ClientMessage> {
     let v: Value = serde_json::from_str(raw).ok()?;
     match v["type"].as_str()? {
         "input_audio.append" => Some(ClientMessage::Append(
             STANDARD.decode(v["audio"].as_str()?).ok()?,
         )),
-        "input_audio.flush" => Some(ClientMessage::Flush),
         "input_audio.end" => Some(ClientMessage::End),
-        _ => None,
+        _ => None, // flush, session.update and unknown types are ignored
     }
 }
 
@@ -72,12 +71,11 @@ pub async fn session(mut ws: WebSocket, cfg: Config, model: String) {
         let Message::Text(text) = msg else { continue };
         match parse_client_message(&text) {
             Some(ClientMessage::Append(pcm)) => buf.extend_from_slice(&pcm),
-            Some(ClientMessage::Flush) => {} // batch upstream: nothing to flush
             Some(ClientMessage::End) => {
                 let pcm = std::mem::take(&mut buf);
                 transcribe(&mut ws, &cfg, &model, pcm).await;
             }
-            None => {} // session.update and unknown types are ignored
+            None => {} // flush, session.update and unknown types are ignored
         }
     }
     tracing::info!("session end model={model}");
