@@ -18,19 +18,19 @@ so that **voice dictation transcribes through my local voxtral server running au
 ## Acceptance criteria
 
 - [x] On WebSocket connect, the bridge sends `session.created` with the `model` query parameter (default `voxtral-realtime`) and `audio_format` `pcm_s16le` / 16 kHz.
-      Test: tests/protocol.rs::test_session_created_on_connect
+      Test: tests/integration/protocol.rs::test_session_created_on_connect
 - [x] `input_audio.append` payloads are base64-decoded and buffered; on `input_audio.end` the buffered PCM is wrapped in a WAV header (pcm_s16le, 16 kHz, mono) and POSTed to the upstream `/v1/audio/transcriptions` with `stream=true`.
-      Test: tests/protocol.rs::test_append_then_end_posts_wav_upstream
+      Test: tests/integration/protocol.rs::test_append_then_end_posts_wav_upstream
 - [x] Upstream SSE `transcript.text.delta` events are forwarded to the client as `transcription.text.delta`, and `transcript.text.done` as `transcription.done` carrying the final text.
-      Test: tests/protocol.rs::test_upstream_deltas_forwarded_as_transcription_events
+      Test: tests/integration/protocol.rs::test_upstream_deltas_forwarded_as_transcription_events
 - [x] An `input_audio.end` with an empty buffer answers `transcription.done` with empty text and makes no upstream call.
-      Test: tests/protocol.rs::test_empty_recording_short_circuits
+      Test: tests/integration/protocol.rs::test_empty_recording_short_circuits
 - [x] A non-200 upstream response is reported to the client as a protocol `error` event including the status code and a truncated body.
-      Test: tests/protocol.rs::test_upstream_error_reported_to_client
+      Test: tests/integration/protocol.rs::test_upstream_error_reported_to_client
 - [x] Listen address, upstream URL, and log level are configurable via environment variables with defaults matching the Python bridge (127.0.0.1:9932, http://127.0.0.1:9931, info).
-      Test: tests/config.rs::test_env_overrides_defaults
+      Test: tests/unit/config.rs::test_env_overrides_defaults
 - [x] Each transcription logs the byte count, approximate duration, and peak sample level; `VOXTRAL_DEBUG_DUMP=1` dumps the raw PCM under `/tmp/voxtral-debug/`.
-      Test: tests/protocol.rs::test_debug_dump_written
+      Test: tests/integration/protocol.rs::test_debug_dump_written
 - [x] Definition of Done met.
 
 ## Notes

@@ -1,5 +1,6 @@
 // Vibe audio bridge: Mistral realtime transcription WS protocol -> voxtral HTTP.
 
+pub mod cli;
 pub mod config;
 pub mod protocol;
 pub mod wav;
