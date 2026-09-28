@@ -50,4 +50,8 @@ pub struct Cli {
     /// Directory for debug dumps (implies --debug-dump) [default: /tmp/vibe-audio-bridge-debug]
     #[arg(long, short = 'D', env = "VIBE_BRIDGE_DUMP_DIR")]
     pub dump_dir: Option<PathBuf>,
+
+    /// Streaming flush interval in ms; 0 disables live deltas (batch mode)
+    #[arg(long, env = "VIBE_BRIDGE_FLUSH_INTERVAL_MS", default_value = "1000")]
+    pub flush_interval_ms: u64,
 }

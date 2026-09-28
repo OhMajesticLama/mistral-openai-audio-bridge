@@ -268,3 +268,68 @@ async fn test_system_dump_dir_env_alone_enables_dumps() {
     assert_eq!(contents, vec![7u8; 64], "dump contents != sent PCM");
     std::fs::remove_dir_all(&dump_dir).ok();
 }
+
+// Story: 011 — VIBE_BRIDGE_FLUSH_INTERVAL_MS=0 disables streaming flushes
+// (batch behavior). Env coverage lives at system level: clap reads the
+// process-global environment, which is racy in parallel in-process tests.
+#[tokio::test]
+async fn test_system_flush_interval_env_zero_disables_streaming() {
+    let upstream = spawn_mock_upstream().await;
+    let port = free_port();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_vibe-audio-bridge"))
+        .env("VIBE_BRIDGE_FLUSH_INTERVAL_MS", "0")
+        .args([
+            "--listen",
+            &format!("127.0.0.1:{port}"),
+            "--upstream",
+            &format!("http://{upstream}"),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    wait_listening(port);
+
+    let url = format!("ws://127.0.0.1:{port}/v1/audio/transcriptions/realtime");
+    let (mut ws, _) = connect_async(url.into_client_request().unwrap()).await.unwrap();
+    let ev: Value =
+        serde_json::from_str(&ws.next().await.unwrap().unwrap().into_text().unwrap()).unwrap();
+    assert_eq!(ev["type"], "session.created");
+    let pcm = vec![7u8; 64];
+    ws.send(Message::Text(
+        serde_json::json!({"type": "input_audio.append", "audio": STANDARD.encode(&pcm)})
+            .to_string()
+            .into(),
+    ))
+    .await
+    .unwrap();
+
+    // Recording in progress: batch mode must stay silent. If the env var
+    // were ignored, the default 1000 ms flush would emit a delta first.
+    match tokio::time::timeout(Duration::from_millis(1500), ws.next()).await {
+        Err(_elapsed) => {}
+        Ok(None) => panic!("stream closed mid-recording"),
+        Ok(Some(Ok(msg))) => panic!("batch mode emitted an event mid-recording: {msg:?}"),
+        Ok(Some(Err(exc))) => panic!("ws error: {exc}"),
+    }
+
+    ws.send(Message::Text(
+        serde_json::json!({"type": "input_audio.end"}).to_string().into(),
+    ))
+    .await
+    .unwrap();
+    loop {
+        let ev: Value =
+            serde_json::from_str(&ws.next().await.unwrap().unwrap().into_text().unwrap()).unwrap();
+        match ev["type"].as_str().unwrap_or_default() {
+            "transcription.done" => {
+                assert_eq!(ev["text"], " Bonjour");
+                break;
+            }
+            "error" => panic!("bridge error: {ev}"),
+            _ => {}
+        }
+    }
+    child.kill().unwrap();
+    let _ = child.wait();
+}

@@ -12,6 +12,7 @@ pub struct Config {
     pub upstream: String,
     pub log_level: String,
     pub dump_dir: Option<PathBuf>,
+    pub flush_interval_ms: u64,
 }
 
 impl Config {
@@ -21,6 +22,12 @@ impl Config {
         } else {
             None
         };
-        Config { listen: cli.listen, upstream: cli.upstream.clone(), log_level: cli.log_level.clone(), dump_dir }
+        Config {
+            listen: cli.listen,
+            upstream: cli.upstream.clone(),
+            log_level: cli.log_level.clone(),
+            dump_dir,
+            flush_interval_ms: cli.flush_interval_ms,
+        }
     }
 }

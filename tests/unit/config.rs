@@ -10,6 +10,7 @@ fn cli() -> Cli {
         log_level: "info".into(),
         debug_dump: false,
         dump_dir: None,
+        flush_interval_ms: 0,
     }
 }
 
