@@ -27,56 +27,6 @@ const SSE_OK: &str = concat!(
     "data: [DONE]\n\n",
 );
 
-const SSE_BON: &str = concat!(
-    "data: {\"type\":\"transcript.text.delta\",\"delta\":\" Bon\"}\n\n",
-    "data: {\"type\":\"transcript.text.done\",\"text\":\" Bon\"}\n\n",
-);
-
-const SSE_BONJOUR: &str = concat!(
-    "data: {\"type\":\"transcript.text.delta\",\"delta\":\" Bon\"}\n\n",
-    "data: {\"type\":\"transcript.text.delta\",\"delta\":\"jour\"}\n\n",
-    "data: {\"type\":\"transcript.text.done\",\"text\":\" Bonjour\"}\n\n",
-);
-
-/// Mock upstream serving a different SSE body per hit (the last one repeats),
-/// so a growing buffer "transcribes" to a growing text.
-async fn spawn_upstream_seq(bodies: Vec<&'static str>) -> MockUpstream {
-    assert!(!bodies.is_empty());
-    let hits = Arc::new(Mutex::new(0u32));
-    let last_body = Arc::new(Mutex::new(Vec::new()));
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let hits_clone = hits.clone();
-    let body_clone = last_body.clone();
-    let bodies = Arc::new(bodies);
-    let app = axum::Router::new().route(
-        "/v1/audio/transcriptions",
-        axum::routing::post(move |bytes: Bytes| {
-            let hits = hits_clone.clone();
-            let last_body = body_clone.clone();
-            let bodies = bodies.clone();
-            async move {
-                let n = {
-                    let mut h = hits.lock().await;
-                    *h += 1;
-                    *h - 1
-                };
-                *last_body.lock().await = bytes.to_vec();
-                let body = bodies[(n as usize).min(bodies.len() - 1)];
-                (
-                    axum::http::StatusCode::OK,
-                    [(axum::http::header::CONTENT_TYPE, "text/event-stream")],
-                    body.to_string(),
-                )
-            }
-        }),
-    );
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
-    MockUpstream { addr, hits, last_body }
-}
-
 struct MockUpstream {
     addr: SocketAddr,
     hits: Arc<Mutex<u32>>,
@@ -128,7 +78,6 @@ fn bridge_cfg(upstream: SocketAddr) -> Config {
         upstream: format!("http://{upstream}"),
         log_level: "info".into(),
         dump_dir: None,
-        flush_interval_ms: 1000,
     }
 }
 
@@ -175,63 +124,30 @@ async fn collect_until_done(ws: &mut Ws) -> (Vec<String>, String) {
     }
 }
 
-// Bug repro: Vibe voice mode shows no text until the recording ends.
-// The bridge must emit transcription.text.delta while audio is still being
-// appended, without waiting for input_audio.end.
+// Story: 013 — an upstream without a live route gets batch behavior: no
+// events during recording, one transcription on input_audio.end. (The
+// removed flush fallback would have emitted a delta here.)
 #[tokio::test]
-async fn test_deltas_stream_before_input_audio_end() {
+async fn test_batch_upstream_silent_until_end() {
     let upstream = spawn_upstream(200, SSE_OK).await;
     let addr = spawn_bridge(bridge_cfg(upstream.addr)).await;
 
     let mut ws = ws_connect(addr, "?model=test-model").await;
     let _ = recv_json(&mut ws).await; // session.created
 
-    // Recording in progress: audio appended, no input_audio.end sent.
     send_json(&mut ws, append_msg(&[0u8; 32])).await;
+    match tokio::time::timeout(Duration::from_millis(1500), ws.next()).await {
+        Err(_elapsed) => {} // silent: correct
+        Ok(None) => panic!("stream closed mid-recording"),
+        Ok(Some(Ok(msg))) => panic!("batch upstream produced an event mid-recording: {msg:?}"),
+        Ok(Some(Err(exc))) => panic!("ws error: {exc}"),
+    }
 
-    // A delta must arrive on its own; timing out means the bridge is
-    // still batch-only (buffers everything until input_audio.end).
-    let ev = tokio::time::timeout(Duration::from_secs(2), ws.next())
-        .await
-        .expect("no event before input_audio.end: streaming is batch-only")
-        .expect("ws error")
-        .expect("stream closed");
-    let ev: Value = match ev {
-        Message::Text(t) => serde_json::from_str(&t).unwrap(),
-        other => panic!("expected text message, got {other:?}"),
-    };
-    assert_eq!(ev["type"], "transcription.text.delta");
-}
-
-// Story: 011 — deltas emitted during recording concatenate to the final text.
-#[tokio::test]
-async fn test_streaming_deltas_concatenate_to_done() {
-    // The mock transcribes a growing buffer: hit 1 -> " Bon", later hits -> " Bonjour".
-    let upstream = spawn_upstream_seq(vec![SSE_BON, SSE_BONJOUR, SSE_BONJOUR]).await;
-    let cfg = Config { flush_interval_ms: 50, ..bridge_cfg(upstream.addr) };
-    let addr = spawn_bridge(cfg).await;
-
-    let mut ws = ws_connect(addr, "?model=test-model").await;
-    let _ = recv_json(&mut ws).await; // session.created
-
-    send_json(&mut ws, append_msg(&[0u8; 32])).await;
-    // First flush transcribes the buffer so far; all of its text is new.
-    let d1 = recv_json(&mut ws).await;
-    assert_eq!(d1["type"], "transcription.text.delta");
-    assert_eq!(d1["text"], " Bon");
-
-    send_json(&mut ws, append_msg(&[0u8; 32])).await;
-    // Second flush re-transcribes from scratch; only the unsent suffix may be emitted.
-    let d2 = recv_json(&mut ws).await;
-    assert_eq!(d2["type"], "transcription.text.delta");
-    assert_eq!(d2["text"], "jour");
-
-    // Ending the recording produces the authoritative done event without
-    // re-emitting already-sent text.
     send_json(&mut ws, end_msg()).await;
     let (deltas, done) = collect_until_done(&mut ws).await;
-    assert!(deltas.is_empty(), "final transcription re-emitted text: {deltas:?}");
+    assert!(deltas.is_empty(), "batch transcription emitted deltas: {deltas:?}");
     assert_eq!(done, " Bonjour");
+    assert_eq!(*upstream.hits.lock().await, 1, "upstream must be hit exactly once");
 }
 
 #[tokio::test]
@@ -277,21 +193,6 @@ async fn test_append_then_end_posts_wav_upstream() {
         .expect("no data chunk");
     let len = u32::from_le_bytes(body[pos + 4..pos + 8].try_into().unwrap()) as usize;
     assert_eq!(&body[pos + 8..pos + 8 + len], &pcm[..], "data chunk != sent PCM");
-}
-
-#[tokio::test]
-async fn test_upstream_deltas_forwarded_as_transcription_events() {
-    let upstream = spawn_upstream(200, SSE_OK).await;
-    let addr = spawn_bridge(bridge_cfg(upstream.addr)).await;
-
-    let mut ws = ws_connect(addr, "?model=test-model").await;
-    let _ = recv_json(&mut ws).await;
-    send_json(&mut ws, append_msg(&[0u8; 32])).await;
-    send_json(&mut ws, end_msg()).await;
-
-    let (deltas, done) = collect_until_done(&mut ws).await;
-    assert_eq!(deltas.join(""), " Bonjour");
-    assert_eq!(done, " Bonjour");
 }
 
 #[tokio::test]

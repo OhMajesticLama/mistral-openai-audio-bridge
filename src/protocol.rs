@@ -60,9 +60,6 @@ async fn send_error(ws: &mut WebSocket, message: &str) {
         .await;
 }
 
-/// One WebSocket session: buffer appends, transcribe on end, and flush the
-/// buffer to the upstream every flush_interval_ms while recording so the
-/// client sees live deltas.
 /// mpsc receiver as a Stream, for reqwest::Body::wrap_stream.
 struct BodyChannel(tokio::sync::mpsc::Receiver<Vec<u8>>);
 
@@ -154,8 +151,7 @@ async fn open_live(cfg: &Config, model: &str) -> Result<LiveSession, String> {
 
 /// One WebSocket session. Preferred path: stream audio into the upstream's
 /// live-ingest endpoint and forward its deltas as they are produced. If the
-/// upstream has no live route, fall back to periodic full-buffer flushes
-/// (suffix-diffed); with streaming disabled, batch-transcribe on end only.
+/// upstream has no live route, batch-transcribe on end only.
 pub async fn session(mut ws: WebSocket, cfg: Config, model: String) {
     tracing::info!("session start model={model}");
     if ws
@@ -165,13 +161,9 @@ pub async fn session(mut ws: WebSocket, cfg: Config, model: String) {
     {
         return;
     }
-    let streaming = cfg.flush_interval_ms > 0;
-    let period = std::time::Duration::from_millis(cfg.flush_interval_ms.max(1));
-    let mut ticker = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
     let mut buf: Vec<u8> = Vec::new();
-    let mut emitted = String::new(); // transcript already sent as deltas (flush mode)
     let mut live: Option<LiveSession> = None;
-    let mut live_supported = true; // false after a failed open: flush for the session
+    let mut live_supported = true; // false after a failed open: batch on end
     loop {
         tokio::select! {
             ev = async {
@@ -199,10 +191,7 @@ pub async fn session(mut ws: WebSocket, cfg: Config, model: String) {
                                     Err(msg) => send_error(&mut ws, &msg).await,
                                 }
                             } else {
-                                // Live died mid-recording: flush takes over.
-                                // ponytail: deltas already sent raw, so the
-                                // flush suffix-diff may re-emit text; degraded
-                                // failure path, accept the duplication.
+                                // Live died mid-recording: batch on end.
                                 live_supported = false;
                             }
                         } else if let Ok(ev) = serde_json::from_str::<Value>(&payload) {
@@ -251,24 +240,11 @@ pub async fn session(mut ws: WebSocket, cfg: Config, model: String) {
                     }
                 }
             }
-            _ = ticker.tick(), if streaming && !buf.is_empty() && live.is_none() => {
-                // ponytail: each flush re-uploads the whole buffer (O(n^2) per
-                // session); the batch upstream needs the full recording for
-                // coherent text. Only used when the live route is unavailable.
-                tracing::debug!("streaming flush of {} bytes", buf.len());
-                match transcribe(&cfg, &model, &buf).await {
-                    Ok(text) => emit_suffix(&mut ws, &mut emitted, &text).await,
-                    // A failed flush must not kill the recording: the final
-                    // transcription on end gets its own chance.
-                    Err(msg) => tracing::warn!("streaming flush failed: {msg}"),
-                }
-            }
             msg = ws.recv() => {
                 let Some(Ok(msg)) = msg else { break };
                 let Message::Text(text) = msg else { continue };
                 match parse_client_message(&text) {
                     Some(ClientMessage::Append(pcm)) => {
-                        let was_empty = buf.is_empty();
                         buf.extend_from_slice(&pcm);
                         match live.as_mut() {
                             Some(l) => {
@@ -282,7 +258,7 @@ pub async fn session(mut ws: WebSocket, cfg: Config, model: String) {
                                 // body_tx already closed (end sent): audio
                                 // buffers until the pending done arrives.
                             }
-                            None if live_supported && streaming => {
+                            None if live_supported => {
                                 match open_live(&cfg, &model).await {
                                     Ok(l) => {
                                         if let Some(tx) = &l.body_tx {
@@ -293,21 +269,13 @@ pub async fn session(mut ws: WebSocket, cfg: Config, model: String) {
                                     Err(msg) => {
                                         tracing::warn!(
                                             "live endpoint unavailable ({msg}); \
-                                             falling back to periodic flush"
+                                             batch transcription on end"
                                         );
                                         live_supported = false;
                                     }
                                 }
                             }
                             _ => {}
-                        }
-                        if was_empty && streaming && live.is_none() {
-                            // Start the flush period at the first audio; a tick
-                            // missed while the buffer was empty would fire at once.
-                            ticker = tokio::time::interval_at(
-                                tokio::time::Instant::now() + period,
-                                period,
-                            );
                         }
                     }
                     Some(ClientMessage::End) => {
@@ -332,7 +300,6 @@ pub async fn session(mut ws: WebSocket, cfg: Config, model: String) {
                             log_recording(&cfg, &pcm);
                             match transcribe(&cfg, &model, &pcm).await {
                                 Ok(text) => {
-                                    emit_suffix(&mut ws, &mut emitted, &text).await;
                                     let _ = ws
                                         .send(Message::Text(done_event(&model, &text).into()))
                                         .await;
@@ -340,7 +307,6 @@ pub async fn session(mut ws: WebSocket, cfg: Config, model: String) {
                                 Err(msg) => send_error(&mut ws, &msg).await,
                             }
                         }
-                        emitted.clear();
                     }
                     None => {} // flush, session.update and unknown types are ignored
                 }
@@ -359,29 +325,6 @@ fn log_recording(cfg: &Config, pcm: &[u8]) {
     );
     if let Some(dir) = &cfg.dump_dir {
         dump(dir, pcm);
-    }
-}
-
-/// Send as a delta the part of `full` not already sent. Each flush re-transcribes
-/// from scratch, so `emitted` is normally a prefix of `full`; if the upstream
-/// revised earlier text, fall back to the longest common prefix (the client may
-/// then see duplicated words — unavoidable without a retract event).
-async fn emit_suffix(ws: &mut WebSocket, emitted: &mut String, full: &str) {
-    let mut common = emitted
-        .bytes()
-        .zip(full.bytes())
-        .take_while(|(a, b)| a == b)
-        .count();
-    while !full.is_char_boundary(common) {
-        common -= 1;
-    }
-    let suffix = &full[common..];
-    if suffix.is_empty() {
-        return;
-    }
-    let out = json!({"type": "transcription.text.delta", "text": suffix});
-    if ws.send(Message::Text(out.to_string().into())).await.is_ok() {
-        emitted.push_str(suffix);
     }
 }
 
@@ -418,9 +361,8 @@ async fn transcribe(cfg: &Config, model: &str, pcm: &[u8]) -> Result<String, Str
 }
 
 /// Stream the upstream SSE body and return the final transcript text.
-/// Upstream deltas are ignored: the caller diffs the final text against
-/// what it already emitted, so forwarding raw deltas would duplicate text
-/// on recordings that were already flushed mid-stream.
+/// Upstream deltas are ignored: the batch path emits only the final
+/// transcription.done.
 async fn collect_done_text(resp: reqwest::Response) -> Result<String, String> {
     use futures_util::StreamExt;
     let mut stream = resp.bytes_stream();

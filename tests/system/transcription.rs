@@ -76,7 +76,6 @@ async fn test_live_transcription_end_to_end() {
         upstream,
         log_level: "info".into(),
         dump_dir: None,
-        flush_interval_ms: 0,
     };
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -144,7 +143,6 @@ async fn test_two_minute_realtime_recording() {
         upstream,
         log_level: "info".into(),
         dump_dir: None,
-        flush_interval_ms: 1000,
     };
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -231,7 +229,6 @@ async fn test_live_processing_is_incremental() {
         upstream,
         log_level: "info".into(),
         dump_dir: None,
-        flush_interval_ms: 1000,
     };
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();

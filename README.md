@@ -41,7 +41,6 @@ defaults:
 | `--log-level` | `VIBE_BRIDGE_LOG_LEVEL` | `info` |
 | `-d`, `--debug-dump` | `VIBE_BRIDGE_DEBUG_DUMP=1` | off |
 | `-D`, `--dump-dir` | `VIBE_BRIDGE_DUMP_DIR` | `/tmp/vibe-audio-bridge-debug` |
-| `--flush-interval-ms` | `VIBE_BRIDGE_FLUSH_INTERVAL_MS` | `1000` |
 
 Setting a dump directory — by flag or environment variable — enables dumps;
 `VIBE_BRIDGE_DEBUG_DUMP=1` enables them with the default directory.

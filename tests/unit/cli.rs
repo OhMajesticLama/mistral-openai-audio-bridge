@@ -8,7 +8,7 @@ use vibe_audio_bridge::cli::Cli;
 /// The clap command with env lookup disabled, for hermetic parsing.
 fn cmd() -> clap::Command {
     let mut cmd = Cli::command();
-    for id in ["listen", "upstream", "log_level", "debug_dump", "dump_dir", "flush_interval_ms"] {
+    for id in ["listen", "upstream", "log_level", "debug_dump", "dump_dir"] {
         cmd = cmd.mut_arg(id, |a| a.env(None));
     }
     cmd
@@ -73,17 +73,6 @@ fn test_shorthands_match_long_forms() {
         "/tmp/bridge-cli-dumps",
     ]);
     assert_eq!(format!("{short:?}"), format!("{long:?}"));
-}
-
-#[test]
-fn test_flush_interval_default_and_flag() {
-    // Story: 011 — streaming flush interval: default 1000 ms, 0 disables streaming.
-    let cli = parse(&["vibe-audio-bridge"]);
-    assert_eq!(cli.flush_interval_ms, 1000);
-    let cli = parse(&["vibe-audio-bridge", "--flush-interval-ms", "250"]);
-    assert_eq!(cli.flush_interval_ms, 250);
-    let cli = parse(&["vibe-audio-bridge", "--flush-interval-ms", "0"]);
-    assert_eq!(cli.flush_interval_ms, 0);
 }
 
 #[test]
