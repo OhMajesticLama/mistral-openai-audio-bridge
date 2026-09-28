@@ -24,7 +24,7 @@ client ──WS──> vibe-audio-bridge ──HTTP multipart──> v1/audio/tr
 ## Install
 
 ```bash
-cargo install --path .
+cargo build --release && cargo install --path .
 ```
 
 The binary lands in `~/.cargo/bin/vibe-audio-bridge`.
